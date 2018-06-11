@@ -4,12 +4,15 @@
 # Hikari Software
 # Y-Enterprise
 
-import re
+import math
 import numpy as np
 import pandas as pd
 from sympy import *
+import re
 
 def main():
+    log_file = open('log.txt','a')
+    log_file.write('-'*30 + '\n\n')
     # Index(['Name', 'Total', 'Ticket_Value', 'Price', 'Maturity', 'Rate','Payment_Date', 'Place', 'Institution', 'Payment_Method','Issuing_Method', 'Type', 'Year'],dtype='object')
     data=pd.read_csv("bond.csv")
     data['Year'] = [int(re.findall(r'\d+',s)[0]) for s in data['Name']]
@@ -34,11 +37,12 @@ def main():
     data['isGov'][data['Institution']!='财政部'] = 0
 
     # 折价发行利率（折现率）
-    # 使用连续复利模型，抹平时间的因素？
+    # 使用连续复利模型，抹平时间的因素！
+    # interest_rate是连续复利的年收益率
 
     def yearly(interest_rate, years):
         def func(x):
-            return (x/(100+x)) ** years * 100 * r / x + 100*((100/(100+x))**years)
+            return (1-(100/(100+x))**years)*100*interest_rate/x + 100/((1+x/100)**years)
         return func
 
     data['Real_Interest']=None
@@ -47,7 +51,7 @@ def main():
         price=data.loc[i,'Price']
         r=data.loc[i,'Rate']
         interest_rate=0
-        if data.xs(i)['Payment_Method'] == '年付' or data.xs(i)['Payment_Method'] == '半年付':
+        if data.xs(i)['Payment_Method'] == '年付':
             func=yearly(r,years)
             x=Symbol('x')
             solutions=solve(func(x)-price,x)
@@ -59,6 +63,9 @@ def main():
                 except TypeError :
                     flag=False
             data.loc[i,'Real_Interest'] = interest_rate
+            log_file.write(str(interest_rate) + '\n')
+            continue
+
         if data.loc[i,'Payment_Method'] == '半年付':
             years *= 2
             r /= 2
@@ -73,13 +80,18 @@ def main():
                 except TypeError :
                     flag=False
 
+            interest_rate = (1+x/100) + (1+x/100)**2 -1
+            interest_rate *= 100
+            data.loc[i,'Real_Interest'] = interest_rate
+            log_file.write(str(interest_rate) + '\n')
+            continue
 
         if data.loc[i,'Payment_Method'] == '月付':
             years *= 12
             r /= 12
             func=yearly(r,years)
             x=Symbol('x')
-             solutions=solve(func(x)-price,x)
+            solutions=solve(func(x)-price,x)
             for s in solutions:
                 flag=False
                 try :
@@ -87,8 +99,30 @@ def main():
                     flag=True
                 except TypeError :
                     flag=False
+            r_ele=0
+            for count in range(1,13):
+                r_ele += (1+interest_rate/100) ** count
+            interest_rate = (r_ele-1)*100
+            data.loc[i,'Real_Interest'] = interest_rate
+            log_file.write(str(interest_rate) + '\n')
+            continue
 
+        if data.loc[i,'Payment_Method'] == '一次还本付息':
+            if data.loc[i,'Maturity'] == 1.0 :
+                interest_rate = r
+            else :
+                interest_rate = ((100*(1+r*years)/price) ** (1/years) - 1)*100
+                
+            data.loc[i,'Real_Interest'] = interest_rate
+            log_file.write(str(interest_rate) + '\n')
+            continue
 
+        if data.loc[i,'Payment_Method'] == '贴现':
+            r=100/price
+            interest_rate = (math.exp(math.log(r)/years)-1)*100
+            data.loc[i,'Real_Interest'] = interest_rate
+            log_file.write(str(interest_rate) + '\n')
+            continue
 
 
     # 设定通货膨胀率
@@ -116,6 +150,10 @@ def main():
             2016 : 8.5,
             2017 : 7.5
             }
+
+    print(data.head())
+    print(data.tail())
+    data.to_csv("alterred.csv",index=False)
 
 
 if __name__ == "__main__":

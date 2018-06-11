@@ -40,7 +40,10 @@ Yield = a + b*Inflation + c*Duration + d*Institution
 3. 发现债权有折价发行，折价发行的依据使得现金流为0的折现率计算收益率
 4. 以债券当期收益率为市场利率（假设国债和地方债市场足够大，价值发掘足够充分），计算久期
 
-## 作图直观感受
+## 直观感受
+1. 通货膨胀和债券利率是否有关系？
+人们会尝试预期通货膨胀率，理论上应该有明显的相关性
+![Plotting Inflation](https://github.com/Cleophile/bondmarket/blob/master/images/plot_inflation.png)
 
 ## 数据回归
 

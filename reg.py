@@ -4,10 +4,10 @@
 # Hikari Software
 # Y-Enterprise
 
+import re
 import numpy as np
 import pandas as pd
-import re
-import sympy as sp
+from sympy import *
 
 def main():
     # Index(['Name', 'Total', 'Ticket_Value', 'Price', 'Maturity', 'Rate','Payment_Date', 'Place', 'Institution', 'Payment_Method','Issuing_Method', 'Type', 'Year'],dtype='object')
@@ -28,11 +28,67 @@ def main():
     data['Payment_Interval'][data['Payment_Method'] == '一次还本息'] = data['Maturity'][data['Payment_Method'] == '一次还本息']
     # Payment_Interval is SET
 
-    # 折价发行利率（折现率）
-    data['Real_Interest']=None
-    data['Real_Interest'][data['Price'] == 100.0]
+    # 是否是国债
+    data['isGov'] = None
+    data['isGov'][data['Institution']=='财政部'] = 1
+    data['isGov'][data['Institution']!='财政部'] = 0
 
-    # 久期计算，久期体现了所有的时间长短和付息间隔的时间长度
+    # 折价发行利率（折现率）
+    # 使用连续复利模型，抹平时间的因素？
+
+    def yearly(interest_rate, years):
+        def func(x):
+            return (x/(100+x)) ** years * 100 * r / x + 100*((100/(100+x))**years)
+        return func
+
+    data['Real_Interest']=None
+    for i in range(len(data)):
+        years=data.loc[i,'Maturity']
+        price=data.loc[i,'Price']
+        r=data.loc[i,'Rate']
+        interest_rate=0
+        if data.xs(i)['Payment_Method'] == '年付' or data.xs(i)['Payment_Method'] == '半年付':
+            func=yearly(r,years)
+            x=Symbol('x')
+            solutions=solve(func(x)-price,x)
+            for s in solutions:
+                flag=False
+                try :
+                    interest_rate=float(s)
+                    flag=True
+                except TypeError :
+                    flag=False
+            data.loc[i,'Real_Interest'] = interest_rate
+        if data.loc[i,'Payment_Method'] == '半年付':
+            years *= 2
+            r /= 2
+            func=yearly(r,years)
+            x=Symbol('x')
+            solutions=solve(func(x)-price,x)
+            for s in solutions:
+                flag=False
+                try :
+                    interest_rate=float(s)
+                    flag=True
+                except TypeError :
+                    flag=False
+
+
+        if data.loc[i,'Payment_Method'] == '月付':
+            years *= 12
+            r /= 12
+            func=yearly(r,years)
+            x=Symbol('x')
+             solutions=solve(func(x)-price,x)
+            for s in solutions:
+                flag=False
+                try :
+                    interest_rate=float(s)
+                    flag=True
+                except TypeError :
+                    flag=False
+
+
 
 
     # 设定通货膨胀率

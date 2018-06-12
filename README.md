@@ -45,6 +45,12 @@ Yield = a + b*Inflation + c*Duration + d*Institution
 人们会尝试预期通货膨胀率，理论上应该有明显的相关性
 ![Plotting Inflation](https://github.com/Cleophile/bondmarket/blob/master/images/plot_inflation.png)
 
+2. 债券利率和是否是财政部发行的有无关系？
+![Data of Institution](https://github.com/Cleophile/bondmarket/blob/master/images/data_interest_rate.png)
+
+3. 久期和债券利率是否有关系？
+![Plotting Duration](https://github.com/Cleophile/bondmarket/blob/master/images/duration.png)
+
 ## 数据回归
 
 

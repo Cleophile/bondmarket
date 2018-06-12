@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from sympy import *
 import re
+from sklearn.linear_model import LinearRegression
 
 def main():
     log_file = open('log.txt','a')
@@ -20,8 +21,8 @@ def main():
     data['Year'][data['Year']<100] += 1900 # 99年等省略
     del data['Ticket_Value']
     # irrelavent
-    data['Payment_Interval'] = None  # 利息支付的时间
-    data['Duration'] = None # 久期, 用于度量利率风险，用于time_real
+    data['Payment_Interval'] = 0  # 利息支付的时间
+    # 久期, 用于度量利率风险，用于time_real
     # set(data['Payment_Interval'])
     #  {nan, '一次还本息', '半年付', '年付', '月付', '贴现'}
     data['Payment_Interval'][data['Payment_Method'] == '年付'] = 1.0
@@ -32,7 +33,7 @@ def main():
     # Payment_Interval is SET
 
     # 是否是国债
-    data['isGov'] = None
+    data['isGov'] = 0
     data['isGov'][data['Institution']=='财政部'] = 1
     data['isGov'][data['Institution']!='财政部'] = 0
 
@@ -45,73 +46,35 @@ def main():
             return (1-(100/(100+x))**years)*100*interest_rate/x + 100/((1+x/100)**years)
         return func
 
-    data['Real_Interest']=None
+    data['Real_Interest']=0
     for i in range(len(data)):
         years=data.loc[i,'Maturity']
         price=data.loc[i,'Price']
         r=data.loc[i,'Rate']
         interest_rate=0
-        if data.xs(i)['Payment_Method'] == '年付':
-            func=yearly(r,years)
-            x=Symbol('x')
-            solutions=solve(func(x)-price,x)
-            for s in solutions:
-                flag=False
-                try :
-                    interest_rate=float(s)
-                    flag=True
-                except TypeError :
-                    flag=False
-            data.loc[i,'Real_Interest'] = interest_rate
+        print(data.loc[i,'Payment_Method'])
+        if data.loc[i,'Payment_Method'] == '年付':
+            data.loc[i,'Real_Interest'] = data.loc[i,'Rate']
             log_file.write(str(interest_rate) + '\n')
             continue
 
         if data.loc[i,'Payment_Method'] == '半年付':
-            years *= 2
             r /= 2
-            func=yearly(r,years)
-            x=Symbol('x')
-            solutions=solve(func(x)-price,x)
-            for s in solutions:
-                flag=False
-                try :
-                    interest_rate=float(s)
-                    flag=True
-                except TypeError :
-                    flag=False
-
-            interest_rate = (1+x/100) + (1+x/100)**2 -1
-            interest_rate *= 100
-            data.loc[i,'Real_Interest'] = interest_rate
+            data.loc[i,'Real_Interest'] = ((1+r/100)**2 - 1)*100
             log_file.write(str(interest_rate) + '\n')
             continue
 
         if data.loc[i,'Payment_Method'] == '月付':
-            years *= 12
             r /= 12
-            func=yearly(r,years)
-            x=Symbol('x')
-            solutions=solve(func(x)-price,x)
-            for s in solutions:
-                flag=False
-                try :
-                    interest_rate=float(s)
-                    flag=True
-                except TypeError :
-                    flag=False
-            r_ele=0
-            for count in range(1,13):
-                r_ele += (1+interest_rate/100) ** count
-            interest_rate = (r_ele-1)*100
-            data.loc[i,'Real_Interest'] = interest_rate
+            data.loc[i,'Real_Interest'] = ((1+r/100)**12 - 1)*100
             log_file.write(str(interest_rate) + '\n')
             continue
 
-        if data.loc[i,'Payment_Method'] == '一次还本付息':
+        if data.loc[i,'Payment_Method'] == '一次还本息':
             if data.loc[i,'Maturity'] == 1.0 :
                 interest_rate = r
             else :
-                interest_rate = ((100*(1+r*years)/price) ** (1/years) - 1)*100
+                interest_rate = (((100+r*years)/price) ** (1/years) - 1)*100
                 
             data.loc[i,'Real_Interest'] = interest_rate
             log_file.write(str(interest_rate) + '\n')
@@ -151,12 +114,36 @@ def main():
             2017 : 7.5
             }
 
-    print(data.head())
-    print(data.tail())
-    data.to_csv("alterred.csv",index=False)
+    data['Inflation'] = 0
+    for i in range(len(data)):
+        data.loc[i,'Inflation'] = yearly_inflation_rate[data.loc[i,'Year']]
 
+    data.dropna(axis=0,how='any')
 
-if __name__ == "__main__":
+    data['Duration'] = 0
+    for i in range(len(data)):
+        try :
+            price = data.loc[i,'Price']
+            if data.loc[i,'Payment_Method'] == '一次还本息' or data.loc[i,'Payment_Method'] == '贴现':
+                data.loc[i,'Duration'] = data.loc[i,'Maturity']
+            if data.loc[i,'Payment_Method'] == '年付' or data.loc[i,'Payment_Method']=='月付' or data.loc[i,'Payment_Method']=='半年付':
+                gap=data.loc[i,'Payment_Interval']
+                yearly_r=data.loc[i,'Real_Interest']
+                r = (yearly_r/100 + 1) ** gap - 1
+                ttimes = round(float(data.loc[i,'Maturity'])/float(gap))
+                print(ttimes)
+                dur = 0
+                for t in range(1,ttimes+1):
+                    dur += gap*yearly_r/((1+r)**t) * t * gap
+                dur += 100/((1+r)**ttimes) * data.loc[i,'Maturity']
+                dur /= price
+                data.loc[i,'Duration'] = dur
+            print('Duration Finished One')
+        except Exception as e:
+            continue
+
+    data.to_csv('alterred.csv',index=false)
+
+if __name__=='__main__':
     main()
-
 
